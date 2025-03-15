@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/student-dashboard.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">Student Dashboard</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="nav-username">Student</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="logoutBtn">Logout</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-8">
+                <div id="map" class="map"></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Tracking</h5>
+                        <p id="tracking-status"><i class="bi bi-info-circle me-1"></i> Click to start sharing your location with connected parents</p>
+                        <button class="btn btn-primary" id="tracking-btn"><i class="bi bi-broadcast me-2"></i> Start Tracking</button>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">QR Scanner</h5>
+                        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
+                            <i class="bi bi-qr-code me-2"></i> Scan QR Code
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Subject Invitations</h5>
+                        <div id="teacher-connections">
+                            <div class="text-center py-3 text-muted"><i class="bi bi-hourglass me-2"></i>Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-body">
+                        <h5 class="card-title">Enrolled Subjects</h5>
+                        <div id="enrolled-subjects">
+                            <div class="text-center py-3 text-muted"><i class="bi bi-hourglass me-2"></i>Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- QR Scanner Modal -->
+    <div class="modal fade" id="qrScannerModal" tabindex="-1" aria-labelledby="qrScannerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="qrScannerModalLabel">QR Scanner</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="qr-reader"></div>
+                    <div id="scan-result" class="mt-3 d-none">
+                        <h6>Scan Result:</h6>
+                        <div id="result-text"></div>
+                        <button class="btn btn-secondary mt-2" id="reset-scanner">Scan Again</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Confirmation Modal -->
+    <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="actionModalLabel">Confirm Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="actionModalBody">
+                    <p>Are you sure you want to perform this action?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="actionConfirmBtn">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.4/html5-qrcode.min.js"></script>
+    <script>
+        // Global variables and error handling
+        let map;
+        let currentMarker = null;
+        let isTracking = false;
+        let watchId = null;
+        let connection;
+        let token; // Global token variable
+        let user; // Global user variable
+        let routeLayer = null; // Layer for the route to school
+        let schoolMarker = null; // Marker for the school
+        let waypoints = []; // Store waypoints
+        
+        // School coordinates (Taguig City University)
+        const SCHOOL_COORDINATES = {
+            latitude: 14.4909,
+            longitude: 121.0551,
+            name: "Taguig City University"
+        };
+        
+        // Global error handling
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error('Global error:', message, 'at', source, ':', lineno, ':', colno);
+            console.error('Error object:', error);
+            return false;
+        };
+
+        // Document ready function
+        document.addEventListener('DOMContentLoaded', async function () {
+            try {
+                // Get token from localStorage
+                token = localStorage.getItem('token');
+                if (!token) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                // Initialize map
+                initMap();
+                
+                // Set up UI elements and event listeners
+                await setupUI();
+                
+                // Set up tracking button
+                document.getElementById('tracking-btn').addEventListener('click', toggleTracking);
+                
+                // Set up logout button
+                document.getElementById('logoutBtn').addEventListener('click', function(e) {
+                    e.preventDefault();
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    window.location.href = '/login.html';
+                });
+                
+                // Set up QR scanner
+                setupQRScanner();
+                
+                console.log('Student dashboard initialization complete');
+            } catch (error) {
+                console.error('Error in student dashboard initialization:', error);
+                document.getElementById('alert-container').innerHTML = 
+                    `<div class="alert alert-danger">Error loading dashboard: ${error.message}</div>`;
+            }
+        });
+        
+        // Initialize map with Leaflet
+        function initMap() {
+            try {
+                console.log('Initializing map...');
+                
+                // Create map centered on school
+                map = L.map('map').setView([SCHOOL_COORDINATES.latitude, SCHOOL_COORDINATES.longitude], 15);
+                
+                // Add OpenStreetMap tile layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+                
+                // Add school marker
+                schoolMarker = L.marker([SCHOOL_COORDINATES.latitude, SCHOOL_COORDINATES.longitude])
+                    .addTo(map)
+                    .bindPopup(`<b>${SCHOOL_COORDINATES.name}</b><br>Your school location`)
+                    .openPopup();
+                    
+                console.log('Map initialized successfully');
+            } catch (error) {
+                console.error('Error initializing map:', error);
+                document.getElementById('map').innerHTML = 
+                    `<div class="alert alert-danger">Error loading map: ${error.message}</div>`;
+            }
+        }
+        
+        // Toggle location tracking
+        async function toggleTracking() {
+            const trackingBtn = document.getElementById('tracking-btn');
+            const trackingStatus = document.getElementById('tracking-status');
+            
+            if (!isTracking) {
+                // Start tracking
+                try {
+                    trackingBtn.innerHTML = '<i class="bi bi-broadcast me-2"></i> Stop Tracking';
+                    trackingBtn.classList.remove('btn-primary');
+                    trackingBtn.classList.add('btn-danger', 'tracking-btn-animated', 'active');
+                    trackingStatus.innerHTML = '<i class="bi bi-broadcast-pin me-1 text-danger"></i> Location tracking is active. Your parents can see your location.';
+                    
+                    // Start watching position
+                    watchId = navigator.geolocation.watchPosition(
+                        updatePosition,
+                        handleLocationError,
+                        { enableHighAccuracy: true, maximumAge: 10000, timeout: 10000 }
+                    );
+                    
+                    isTracking = true;
+                } catch (error) {
+                    console.error('Error starting tracking:', error);
+                    trackingStatus.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Error starting tracking: ${error.message}`;
+                }
+            } else {
+                // Stop tracking
+                try {
+                    trackingBtn.innerHTML = '<i class="bi bi-broadcast me-2"></i> Start Tracking';
+                    trackingBtn.classList.remove('btn-danger', 'tracking-btn-animated', 'active');
+                    trackingBtn.classList.add('btn-primary');
+                    trackingStatus.innerHTML = '<i class="bi bi-info-circle me-1"></i> Click to start sharing your location with connected parents';
+                    
+                    // Stop watching position
+                    if (watchId !== null) {
+                        navigator.geolocation.clearWatch(watchId);
+                        watchId = null;
+                    }
+                    
+                    // Remove current marker if exists
+                    if (currentMarker) {
+                        map.removeLayer(currentMarker);
+                        currentMarker = null;
+                    }
+                    
+                    isTracking = false;
+                } catch (error) {
+                    console.error('Error stopping tracking:', error);
+                }
+            }
+        }
+        
+        // Update position on map
+        function updatePosition(position) {
+            try {
+                const { latitude, longitude } = position.coords;
+                console.log(`Position updated: ${latitude}, ${longitude}`);
+                
+                // Remove existing marker if any
+                if (currentMarker) {
+                    map.removeLayer(currentMarker);
+                }
+                
+                // Add new marker
+                currentMarker = L.marker([latitude, longitude])
+                    .addTo(map)
+                    .bindPopup('Your current location')
+                    .openPopup();
+                
+                // Center map on current position
+                map.setView([latitude, longitude], 15);
+                
+                // Add to waypoints
+                waypoints.push({
+                    lat: latitude,
+                    lng: longitude,
+                    time: new Date()
+                });
+                
+                // Send position to server
+                sendPositionToServer(latitude, longitude);
+            } catch (error) {
+                console.error('Error updating position:', error);
+            }
+        }
+        
+        // Handle location errors
+        function handleLocationError(error) {
+            console.error('Geolocation error:', error);
+            const trackingStatus = document.getElementById('tracking-status');
+            
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    trackingStatus.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i> Location permission denied. Please enable location services.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    trackingStatus.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Location information unavailable.';
+                    break;
+                case error.TIMEOUT:
+                    trackingStatus.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Location request timed out.';
+                    break;
+                default:
+                    trackingStatus.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i> Unknown error: ${error.message}`;
+            }
+            
+            // Stop tracking if there's an error
+            if (isTracking) {
+                toggleTracking();
+            }
+        }
+        
+        // Send position to server
+        async function sendPositionToServer(latitude, longitude) {
+            try {
+                const response = await fetch('/api/location/update', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        latitude,
+                        longitude,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('Position sent to server successfully');
+                } else {
+                    console.error('Error sending position to server:', response.statusText);
+                }
+            } catch (error) {
+                console.error('Error sending position to server:', error);
+            }
+        }
+        
+        // Set up QR scanner
+        function setupQRScanner() {
+            try {
+                const resetScannerBtn = document.getElementById('reset-scanner');
+                let html5QrCode;
+                
+                // Initialize QR scanner when modal is shown
+                $('#qrScannerModal').on('shown.bs.modal', function () {
+                    html5QrCode = new Html5Qrcode("qr-reader");
+                    
+                    const qrConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
+                    
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        qrConfig,
+                        onScanSuccess
+                    ).catch(error => {
+                        console.error('QR scanner error:', error);
+                        document.getElementById('qr-reader').innerHTML = 
+                            `<div class="alert alert-danger">Error starting camera: ${error.message}</div>`;
+                    });
+                });
+                
+                // Stop scanner when modal is hidden
+                $('#qrScannerModal').on('hidden.bs.modal', function () {
+                    if (html5QrCode) {
+                        html5QrCode.stop().catch(error => console.error('Error stopping scanner:', error));
+                    }
+                });
+                
+                // Reset scanner button
+                resetScannerBtn.addEventListener('click', function() {
+                    document.getElementById('scan-result').classList.add('d-none');
+                    
+                    if (html5QrCode) {
+                        html5QrCode.resume().catch(error => console.error('Error resuming scanner:', error));
+                    }
+                });
+                
+                // Function to handle successful scan
+                function onScanSuccess(decodedText, decodedResult) {
+                    console.log(`QR Code detected: ${decodedText}`);
+                    
+                    // Stop scanning
+                    html5QrCode.pause();
+                    
+                    // Display result
+                    document.getElementById('scan-result').classList.remove('d-none');
+                    document.getElementById('result-text').innerHTML = `<strong>${decodedText}</strong>`;
+                    
+                    // Process QR code data
+                    processQRCode(decodedText);
+                }
+                
+                // Process QR code data
+                function processQRCode(qrData) {
+                    try {
+                        // Try to parse as JSON
+                        const data = JSON.parse(qrData);
+                        
+                        if (data.type === 'attendance') {
+                            // Handle attendance QR code
+                            document.getElementById('result-text').innerHTML = `
+                                <div class="alert alert-success">
+                                    <h6>Attendance QR Code</h6>
+                                    <p>Class: ${data.className}</p>
+                                    <p>Teacher: ${data.teacher}</p>
+                                    <p>Date: ${new Date(data.timestamp).toLocaleString()}</p>
+                                    <button class="btn btn-primary btn-sm confirm-attendance" 
+                                        data-class-id="${data.classId}">Confirm Attendance</button>
+                                </div>
+                            `;
+                            
+                            // Add event listener for confirmation button
+                            document.querySelector('.confirm-attendance').addEventListener('click', function() {
+                                const classId = this.dataset.classId;
+                                confirmAttendance(classId);
+                            });
+                        } else {
+                            // Unknown QR code type
+                            document.getElementById('result-text').innerHTML = `
+                                <div class="alert alert-warning">
+                                    Unknown QR code type: ${data.type || 'Not specified'}
+                                </div>
+                            `;
+                        }
+                    } catch (error) {
+                        // Not JSON, display as text
+                        console.error('Error processing QR code:', error);
+                        document.getElementById('result-text').innerHTML = `
+                            <div class="alert alert-info">
+                                <p>Detected text:</p>
+                                <p class="mb-0"><strong>${qrData}</strong></p>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Confirm attendance
+                async function confirmAttendance(classId) {
+                    try {
+                        const response = await fetch('/api/attendance/confirm', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                classId: classId,
+                                timestamp: new Date().toISOString()
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            document.getElementById('result-text').innerHTML = `
+                                <div class="alert alert-success">
+                                    <h6>Attendance Confirmed!</h6>
+                                    <p>${data.message}</p>
+                                </div>
+                            `;
+                        } else {
+                            const errorText = await response.text();
+                            document.getElementById('result-text').innerHTML = `
+                                <div class="alert alert-danger">
+                                    <h6>Error</h6>
+                                    <p>${errorText}</p>
+                                </div>
+                            `;
+                        }
+                    } catch (error) {
+                        console.error('Error confirming attendance:', error);
+                        document.getElementById('result-text').innerHTML = `
+                            <div class="alert alert-danger">
+                                <h6>Error</h6>
+                                <p>${error.message}</p>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                console.error('Error setting up QR scanner:', error);
+            }
+        }
+        
+        // Function to load teacher connections (Subject Invitations)
+        async function loadTeacherConnections() {
+            try {
+                console.log('Loading teacher connections...');
+                const teacherConnectionsContainer = document.getElementById('teacher-connections');
+                teacherConnectionsContainer.innerHTML = '<div class="text-center py-3 text-muted"><i class="bi bi-hourglass me-2"></i>Loading...</div>';
+                
+                const response = await fetch('/api/teacherconnection/pending', {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    method: 'GET'
+                });
+                
+                console.log('Teacher connections API response status:', response.status);
+                
+                if (response.ok) {
+                    const connections = await response.json();
+                    console.log('Teacher connections data:', connections);
+                    
+                    if (connections.length === 0) {
+                        teacherConnectionsContainer.innerHTML = 
+                            '<div class="alert alert-info py-2">No pending subject invitations.</div>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    connections.forEach(connection => {
+                        html += `
+                            <div class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="mb-1">${connection.subject.name}</h5>
+                                        <p class="mb-1 text-muted">Teacher: ${connection.teacher.fullname}</p>
+                                        <small class="text-muted">Sent: ${new Date(connection.createdAt).toLocaleString()}</small>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-success me-1 accept-teacher-btn" 
+                                            data-connection-id="${connection.connectionId}">
+                                            <i class="bi bi-check-circle me-1"></i>Accept
+                                        </button>
+                                        <button class="btn btn-sm btn-danger reject-teacher-btn" 
+                                            data-connection-id="${connection.connectionId}">
+                                            <i class="bi bi-x-circle me-1"></i>Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    teacherConnectionsContainer.innerHTML = html;
+                    
+                    // Add event listeners for accept/reject buttons
+                    document.querySelectorAll('.accept-teacher-btn').forEach(button => {
+                        button.addEventListener('click', () => handleTeacherConnectionResponse(button.dataset.connectionId, 'Approved'));
+                    });
+                    
+                    document.querySelectorAll('.reject-teacher-btn').forEach(button => {
+                        button.addEventListener('click', () => handleTeacherConnectionResponse(button.dataset.connectionId, 'Rejected'));
+                    });
+                } else {
+                    const errorText = await response.text();
+                    console.error('Teacher connections API error:', errorText);
+                    teacherConnectionsContainer.innerHTML = 
+                        `<div class="alert alert-danger py-2">Error loading invitations: ${errorText}</div>`;
+                }
+            } catch (error) {
+                console.error('Error loading teacher connections:', error);
+                document.getElementById('teacher-connections').innerHTML = 
+                    `<div class="alert alert-danger py-2">Error: ${error.message}</div>`;
+            }
+        }
+        
+        // Function to handle teacher connection response (accept/reject)
+        async function handleTeacherConnectionResponse(connectionId, status) {
+            try {
+                console.log(`Responding to teacher connection ${connectionId} with status ${status}`);
+                
+                const response = await fetch('/api/teacherconnection/respond', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        connectionId: connectionId,
+                        status: status
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    // Show success message
+                    const alertClass = status === 'Approved' ? 'success' : 'warning';
+                    const alertMessage = `<div class="alert alert-${alertClass} alert-dismissible fade show" role="alert">
+                        ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>`;
+                    
+                    document.getElementById('alert-container').innerHTML = alertMessage;
+                    
+                    // Reload connections
+                    await loadTeacherConnections();
+                    
+                    // If approved, also reload enrolled subjects
+                    if (status === 'Approved') {
+                        await loadEnrolledSubjects();
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error('Error responding to connection:', errorText);
+                    
+                    document.getElementById('alert-container').innerHTML = `
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            Error: ${errorText}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error handling connection response:', error);
+                document.getElementById('alert-container').innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        Error: ${error.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Function to load enrolled subjects
+        async function loadEnrolledSubjects() {
+            try {
+                console.log('Loading enrolled subjects...');
+                const enrolledSubjectsContainer = document.getElementById('enrolled-subjects');
+                enrolledSubjectsContainer.innerHTML = '<div class="text-center py-3 text-muted"><i class="bi bi-hourglass me-2"></i>Loading...</div>';
+                
+                const response = await fetch('/api/teacherconnection/connected', {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    method: 'GET'
+                });
+                
+                console.log('Enrolled subjects API response status:', response.status);
+                
+                if (response.ok) {
+                    const connections = await response.json();
+                    console.log('Enrolled subjects data:', connections);
+                    
+                    if (connections.length === 0) {
+                        enrolledSubjectsContainer.innerHTML = 
+                            '<div class="alert alert-info py-2">You are not enrolled in any subjects yet.</div>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    connections.forEach(connection => {
+                        html += `
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="mb-1">${connection.subject.name}</h5>
+                                        <p class="mb-1 text-muted">Teacher: ${connection.teacher.fullname}</p>
+                                        <small class="text-muted">Enrolled: ${new Date(connection.createdAt).toLocaleString()}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    enrolledSubjectsContainer.innerHTML = html;
+                } else {
+                    const errorText = await response.text();
+                    console.error('Enrolled subjects API error:', errorText);
+                    enrolledSubjectsContainer.innerHTML = 
+                        `<div class="alert alert-danger py-2">Error loading subjects: ${errorText}</div>`;
+                }
+            } catch (error) {
+                console.error('Error loading enrolled subjects:', error);
+                document.getElementById('enrolled-subjects').innerHTML = 
+                    `<div class="alert alert-danger py-2">Error: ${error.message}</div>`;
+            }
+        }
+        
+        // Setup UI and event listeners
+        async function setupUI() {
+            try {
+                console.log('Setting up UI...');
+                
+                // Get token from localStorage
+                token = localStorage.getItem('token');
+                if (!token) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+                
+                // Get user information
+                try {
+                    const userResponse = await fetch('/api/student/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (userResponse.ok) {
+                        user = await userResponse.json();
+                        // Update username in navbar
+                        document.getElementById('nav-username').textContent = user.fullname || user.username || 'Student';
+                    } else {
+                        console.error('Error fetching user info:', await userResponse.text());
+                    }
+                } catch (error) {
+                    console.error('Error fetching user info:', error);
+                }
+                
+                // Load parent connections
+                await loadParentConnections();
+                
+                // Load teacher connections
+                await loadTeacherConnections();
+                
+                // Load enrolled subjects
+                await loadEnrolledSubjects();
+                
+                // Load rejected connections
+                await loadRejectedConnections();
+                
+                console.log('UI setup complete');
+            } catch (error) {
+                console.error('Error setting up UI:', error);
+                document.getElementById('alert-container').innerHTML = 
+                    `<div class="alert alert-danger">Error setting up UI: ${error.message}</div>`;
+            }
+        }
+        
+        // Load parent connections (pending and connected)
+        async function loadParentConnections() {
+            try {
+                // Load pending connections
+                const pendingResponse = await fetch('/api/connection/pending', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (pendingResponse.ok) {
+                    const pendingConnections = await pendingResponse.json();
+                    displayPendingConnections(pendingConnections);
+                } else {
+                    console.error('Error loading pending connections:', await pendingResponse.text());
+                }
+                
+                // Load connected parents
+                const connectedResponse = await fetch('/api/connection/connected', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (connectedResponse.ok) {
+                    const connectedParents = await connectedResponse.json();
+                    displayConnectedParents(connectedParents);
+                } else {
+                    console.error('Error loading connected parents:', await connectedResponse.text());
+                }
+            } catch (error) {
+                console.error('Error loading parent connections:', error);
+            }
+        }
+        
+        // Display pending connections
+        function displayPendingConnections(connections) {
+            const container = document.getElementById('pending-connections');
+            
+            if (connections.length === 0) {
+                container.innerHTML = '<div class="alert alert-info py-2">No pending connection requests.</div>';
+                return;
+            }
+            
+            let html = '';
+            connections.forEach(conn => {
+                html += `
+                    <div class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">${conn.parent.fullname}</h5>
+                                <small class="text-muted">
+                                    <i class="bi bi-envelope me-1"></i>${conn.parent.email} 
+                                    <span class="ms-2">
+                                        <i class="bi bi-clock me-1"></i>${new Date(conn.createdAt).toLocaleString()}
+                                    </span>
+                                </small>
+                            </div>
+                            <div>
+                                <button class="btn btn-sm btn-success me-1 accept-btn" 
+                                    data-connection-id="${conn.connectionId}">
+                                    <i class="bi bi-check-circle me-1"></i>Accept
+                                </button>
+                                <button class="btn btn-sm btn-danger reject-btn" 
+                                    data-connection-id="${conn.connectionId}">
+                                    <i class="bi bi-x-circle me-1"></i>Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            
+            // Add event listeners
+            document.querySelectorAll('.accept-btn').forEach(btn => {
+                btn.addEventListener('click', () => respondToConnection(btn.dataset.connectionId, 'Approved'));
+            });
+            
+            document.querySelectorAll('.reject-btn').forEach(btn => {
+                btn.addEventListener('click', () => respondToConnection(btn.dataset.connectionId, 'Rejected'));
+            });
+        }
+        
+        // Display connected parents
+        function displayConnectedParents(parents) {
+            const container = document.getElementById('connected-parents');
+            
+            if (parents.length === 0) {
+                container.innerHTML = '<div class="alert alert-info py-2">No connected parents yet.</div>';
+                return;
+            }
+            
+            let html = '';
+            parents.forEach(conn => {
+                html += `
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">${conn.parent.fullname}</h5>
+                                <small class="text-muted">
+                                    <i class="bi bi-envelope me-1"></i>${conn.parent.email} 
+                                    <span class="ms-2">
+                                        <i class="bi bi-calendar-check me-1"></i>Connected since ${new Date(conn.createdAt).toLocaleDateString()}
+                                    </span>
+                                </small>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger remove-btn" 
+                                data-connection-id="${conn.connectionId}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            
+            // Add event listeners for removal
+            document.querySelectorAll('.remove-btn').forEach(btn => {
+                btn.addEventListener('click', () => removeConnection(btn.dataset.connectionId));
+            });
+        }
+        
+        // Load rejected connections
+        async function loadRejectedConnections() {
+            try {
+                const response = await fetch('/api/connection/rejected', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const rejectedConnections = await response.json();
+                    displayRejectedConnections(rejectedConnections);
+                } else {
+                    console.error('Error loading rejected connections:', await response.text());
+                }
+            } catch (error) {
+                console.error('Error loading rejected connections:', error);
+            }
+        }
+        
+        // Display rejected connections
+        function displayRejectedConnections(connections) {
+            const container = document.getElementById('rejected-connections');
+            
+            if (connections.length === 0) {
+                container.innerHTML = '<div class="alert alert-info py-2">No rejected connection requests.</div>';
+                return;
+            }
+            
+            let html = '';
+            connections.forEach(conn => {
+                html += `
+                    <div class="list-group-item">
+                        <div class="d-flex w-100 justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">${conn.parent.fullname}</h5>
+                                <small class="text-muted">
+                                    <i class="bi bi-envelope me-1"></i>${conn.parent.email} 
+                                    <span class="ms-2">
+                                        <i class="bi bi-calendar-x me-1"></i>Rejected on ${new Date(conn.updatedAt).toLocaleDateString()}
+                                    </span>
+                                </small>
+                            </div>
+                            <div>
+                                <span class="badge bg-warning text-dark rounded-pill">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    ${conn.rejectionCount}/3 rejections
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        // Respond to parent connection
+        async function respondToConnection(connectionId, status) {
+            try {
+                console.log(`Responding to connection ${connectionId} with status ${status}`);
+                
+                const response = await fetch('/api/connection/respond', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        connectionId: connectionId,
+                        status: status
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Response data:', data);
+                    
+                    // Show success message
+                    const alertClass = status === 'Approved' ? 'success' : 'warning';
+                    const alertMessage = `<div class="alert alert-${alertClass} alert-dismissible fade show" role="alert">
+                        ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>`;
+                    
+                    document.getElementById('alert-container').innerHTML = alertMessage;
+                    
+                    // Reload connections
+                    await loadParentConnections();
+                    
+                    // If rejected, reload the rejected connections
+                    if (status === 'Rejected') {
+                        await loadRejectedConnections();
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error('Error responding to connection:', errorText);
+                    
+                    document.getElementById('alert-container').innerHTML = `
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            Error: ${errorText}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error responding to connection:', error);
+                document.getElementById('alert-container').innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        Error: ${error.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+            }
+        }
+        
+        // Remove a parent connection
+        async function removeConnection(connectionId) {
+            try {
+                // Show confirmation modal
+                const modalBody = document.getElementById('actionModalBody');
+                modalBody.innerHTML = `
+                    <p>Are you sure you want to remove this connection?</p>
+                    <p class="text-danger"><small>The parent will no longer be able to track your location.</small></p>
+                `;
+                
+                const actionModal = new bootstrap.Modal(document.getElementById('actionModal'));
+                actionModal.show();
+                
+                const confirmBtn = document.getElementById('actionConfirmBtn');
+                
+                // Remove previous event listeners
+                const newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                
+                // Add new event listener
+                newConfirmBtn.addEventListener('click', async () => {
+                    try {
+                        const response = await fetch(`/api/connection/${connectionId}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('Delete response:', data);
+                            
+                            // Show success message
+                            document.getElementById('alert-container').innerHTML = `
+                                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                    ${data.message}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            `;
+                            
+                            // Reload connections
+                            await loadParentConnections();
+                        } else {
+                            const errorText = await response.text();
+                            console.error('Error removing connection:', errorText);
+                            
+                            document.getElementById('alert-container').innerHTML = `
+                                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                    Error: ${errorText}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            `;
+                        }
+                        
+                        // Hide modal
+                        actionModal.hide();
+                    } catch (error) {
+                        console.error('Error removing connection:', error);
+                        
+                        document.getElementById('alert-container').innerHTML = `
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                Error: ${error.message}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        `;
+                        
+                        // Hide modal
+                        actionModal.hide();
+                    }
+                });
+            } catch (error) {
+                console.error('Error preparing removal:', error);
+                
+                document.getElementById('alert-container').innerHTML = `
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        Error: ${error.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
